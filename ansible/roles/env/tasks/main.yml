@@ -1,0 +1,16 @@
+- name: Normalize EC2 tags to ec2_tags
+  set_fact:
+    ec2_tags: "{{ tags | default({}, true) }}"
+
+- name: Fail if NodeName tag is missing
+  assert:
+    that:
+      - ec2_tags is mapping
+      - ec2_tags.NodeName is defined
+      - (ec2_tags.NodeName | length) > 0
+    fail_msg: "EC2 tag NodeName is missing for {{ inventory_hostname }}"
+
+- name: Set hostname from EC2 tag NodeName
+  become: true
+  hostname:
+    name: "{{ ec2_tags.NodeName }}"

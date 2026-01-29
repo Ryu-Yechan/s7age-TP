@@ -1,0 +1,16 @@
+# MySQL 설정 변수
+mysql_namespace: mysql
+mysql_root_password: "{{ mysql_root_password }}"
+mysql_database: stage
+
+# 워커노드3 고정용 레이블
+mysql_node_label_key: node-role
+mysql_node_label_value: db
+
+# 스토리지 설정
+mysql_storage_size: 10Gi
+mysql_storage_class: ebs-sc
+
+# kubeconfig 경로
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+mysql_storage_reclaim_policy: Retain 

@@ -1,0 +1,58 @@
+- name: Add Argo Helm repo
+  become: true
+  shell: helm repo add argo https://argoproj.github.io/argo-helm || true
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Update Helm repos
+  become: true
+  shell: helm repo update
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Create argocd namespace
+  become: true
+  shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Install Argo CD with insecure mode
+  become: true
+  shell: |
+    helm upgrade --install argocd argo/argo-cd \
+      -n argocd \
+      --set server.service.type=ClusterIP \
+      --set 'configs.params.server\.insecure=true'
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for Argo CD server deployment ready
+  become: true
+  shell: kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Render Argo CD Ingress manifest
+  become: true
+  template:
+    src: argocd-ingress.yaml.j2
+    dest: /tmp/argocd-ingress.yaml
+    mode: "0644"
+
+- name: Apply Argo CD Ingress manifest
+  become: true
+  shell: kubectl apply -f /tmp/argocd-ingress.yaml
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Show Argo CD pod status
+  become: true
+  shell: kubectl -n argocd get pods
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Show ingresses
+  become: true
+  shell: kubectl get ingress -A
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml

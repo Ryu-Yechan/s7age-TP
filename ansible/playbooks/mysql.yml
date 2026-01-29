@@ -1,0 +1,40 @@
+
+
+# 2단계: 마스터에서 MySQL 설치
+- name: Deploy MySQL on K3s
+  hosts: master
+  become: true
+  gather_facts: false
+  roles:
+    - db/mysql
+    - db/mysql_ddl
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

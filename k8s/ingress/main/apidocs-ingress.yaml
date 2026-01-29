@@ -1,0 +1,61 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apidocs-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.s7age.com
+      http:
+        paths:
+          # user-service
+          - path: /api/v1(/|$)(v3/api-docs.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+          - path: /api/v1(/|$)(swagger-ui.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          # reserve-service
+          - path: /api/v1/reserve(/|$)(v3/api-docs.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: reserve-service
+                port:
+                  number: 8080
+          - path: /api/v1/reserve(/|$)(swagger-ui.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: reserve-service
+                port:
+                  number: 8080
+
+          # other-service
+          - path: /api/v1/perform(/|$)(v3/api-docs.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: other-service
+                port:
+                  number: 8080
+          - path: /api/v1/perform(/|$)(swagger-ui.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: other-service
+                port:
+                  number: 8080

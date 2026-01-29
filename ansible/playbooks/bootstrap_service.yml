@@ -1,0 +1,25 @@
+- name: set nodename labels
+  hosts: monitoring
+  become: true
+  gather_facts: false
+  roles:
+    - label/monitoring
+
+- name: Install cluster addons
+  hosts: master
+  become: true
+  gather_facts: false
+  roles:
+    - namespace
+    - secrets
+    - ingress_nginx
+    - argocd/install
+    - argocd/ui
+    - argocd/admin_password
+    - prometheus_stack
+    - loki
+    - otelcol
+    - label/mysql_label
+    - db/mysql
+    - db/mysql_ddl
+    - argocd/apps

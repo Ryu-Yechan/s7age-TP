@@ -1,0 +1,11 @@
+- name: Get k8s node name (hostname) on worker
+  command: hostname
+  register: node_hostname
+  changed_when: false
+
+- name: Apply monitoring label (run kubectl on master)
+  shell: |
+    kubectl label node {{ node_hostname.stdout }} role=monitoring --overwrite
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  delegate_to: "{{ groups['master'][0] }}"

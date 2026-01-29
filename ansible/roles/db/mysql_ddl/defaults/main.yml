@@ -1,0 +1,3 @@
+mysql_namespace: mysql
+mysql_database: stage
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml

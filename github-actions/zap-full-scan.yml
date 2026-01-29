@@ -1,0 +1,97 @@
+name: ZAP Frontend + Backend Scan (Reports Split)
+
+on:
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: "Select scan type"
+        type: choice
+        required: true
+        default: all
+        options: [all, frontend, api]
+      api_name:
+        description: "Select API (only if scan_type=api)"
+        type: choice
+        required: false
+        default: user
+        options: [user, reserve, other]
+
+jobs:
+  # =========================
+  # 1) Frontend ZAP Full Scan
+  # =========================
+  zap_frontend_scan:
+    if: ${{ inputs.scan_type == 'all' || inputs.scan_type == 'frontend' }}
+    runs-on: [self-hosted, linux]
+    continue-on-error: true
+
+    steps:
+      - name: ZAP Full Scan (Frontend)
+        run: |
+          mkdir -p "zap-out/frontend"
+          docker run --rm \
+            -v "${PWD}/zap-out/frontend:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-full-scan.py \
+              -t "https://dev.s7age.com" \
+              -n /zap/wrk/zap-context.xml \
+              -r "zap-frontend-report.html" \
+              -J "zap-frontend-report.json"
+
+      - name: Upload Frontend Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-frontend-reports
+          path: |
+            zap-out/frontend/zap-frontend-report.html
+            zap-out/frontend/zap-frontend-report.json
+
+  # =========================
+  # 2) Backend ZAP API Scan
+  # =========================
+  zap_api_scan:
+    if: ${{ inputs.scan_type == 'all' || inputs.scan_type == 'api' }}
+    runs-on: [self-hosted, linux]
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        api:
+          - name: user
+            spec: https://dev.api.s7age.com/api/v1/v3/api-docs
+          - name: reserve
+            spec: https://devapi.s7age.com/api/v1/reserve/v3/api-docs
+          - name: other
+            spec: https://dev.api.s7age.com/api/v1/perform/v3/api-docs
+
+    steps:
+      - name: Precheck OpenAPI (${{ matrix.api.name }})
+        if: ${{ inputs.scan_type == 'all' || matrix.api.name == inputs.api_name }}
+        continue-on-error: true
+        run: |
+          echo "Checking: ${{ matrix.api.spec }}"
+          curl -k -I --max-time 10 "${{ matrix.api.spec }}" || true
+
+      - name: ZAP API Scan (${{ matrix.api.name }})
+        if: ${{ inputs.scan_type == 'all' || matrix.api.name == inputs.api_name }}
+        continue-on-error: true
+        run: |
+          mkdir -p "zap-out/api/${{ matrix.api.name }}"
+          docker run --rm \
+            -v "${PWD}/zap-out/api/${{ matrix.api.name }}:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py \
+              -t "${{ matrix.api.spec }}" \
+              -f openapi \
+              -r "zap-${{ matrix.api.name }}-api-report.html" \
+              -J "zap-${{ matrix.api.name }}-api-report.json"
+
+      - name: Upload API Reports (${{ matrix.api.name }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-api-${{ matrix.api.name }}-reports
+          path: |
+            zap-out/api/${{ matrix.api.name }}/zap-${{ matrix.api.name }}-api-report.html
+            zap-out/api/${{ matrix.api.name }}/zap-${{ matrix.api.name }}-api-report.json

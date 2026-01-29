@@ -1,0 +1,52 @@
+- name: Add OpenTelemetry Helm repo
+  shell: helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  failed_when: false
+  changed_when: false
+
+- name: Update Helm repos
+  shell: helm repo update
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Ensure observability namespace exists
+  shell: |
+    kubectl create ns observability --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# [락 방지] 상태 체크
+- name: Check if OTEL Collector release is in pending or failed state
+  shell: |
+    helm list -n observability -f "^otelcol$" | grep -E "pending-install|pending-upgrade|failed"
+  register: otel_status
+  failed_when: false
+  changed_when: false
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# [락 해제] 상태가 꼬였다면 강제 정리
+- name: Force cleanup OTEL Collector if it is stuck
+  shell: |
+    helm uninstall otelcol -n observability --wait || kubectl delete secret -n observability -l name=otelcol,owner=helm
+  when: otel_status.rc == 0
+  failed_when: false
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# 1. 로컬의 values.yml을 서버로 복사
+- name: Copy OTEL Collector values file to remote
+  copy:
+    src: values.yml 
+    dest: /tmp/otel-values.yaml
+    mode: '0644'
+
+- name: Install OTEL Collector
+  shell: |
+    helm upgrade --install otelcol open-telemetry/opentelemetry-collector \
+      -n observability \
+      -f /tmp/otel-values.yaml \
+      --timeout 10m
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml

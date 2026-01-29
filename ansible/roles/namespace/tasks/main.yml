@@ -1,0 +1,6 @@
+- name: Ensure monitoring namespace exists
+  become: true
+  shell: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  run_once: true

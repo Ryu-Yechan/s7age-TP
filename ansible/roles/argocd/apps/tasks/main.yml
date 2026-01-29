@@ -1,0 +1,90 @@
+# roles/argocd-apps/tasks/main.yml
+# ArgoCD Application 등록 + GitHub 인증
+
+- name: Wait for ArgoCD server to be ready
+  become: true
+  shell: kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# GitHub Private 레포 인증 추가
+- name: Add GitHub repository credentials to ArgoCD
+  become: true
+  shell: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: github-repo-creds
+      namespace: argocd
+      labels:
+        argocd.argoproj.io/secret-type: repo-creds
+    stringData:
+      type: git
+      url: https://github.com/S7AGE
+      username: {{ github_id }}
+      password: {{ github_pat }}
+    EOF
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  no_log: true
+
+# App of Apps 생성
+- name: Create App of Apps (root application)
+  become: true
+  shell: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: root-apps
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: {{ gitops_repo_url }}
+        path: {{ gitops_path | default('k8s/apps') }}
+        targetRevision: {{ gitops_branch | default('main') }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+    EOF
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for root-apps to sync
+  become: true
+  shell: |
+    for i in {1..30}; do
+      STATUS=$(kubectl -n argocd get app root-apps -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+      if [ "$STATUS" = "Synced" ]; then
+        echo "root-apps synced successfully"
+        exit 0
+      fi
+      echo "Waiting for sync... ($STATUS)"
+      sleep 10
+    done
+    echo "Timeout waiting for sync"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: sync_result
+  ignore_errors: true
+
+- name: Show all ArgoCD applications
+  become: true
+  shell: kubectl -n argocd get applications
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: apps_list
+
+- name: Display applications
+  debug:
+    var: apps_list.stdout_lines

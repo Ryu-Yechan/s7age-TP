@@ -1,0 +1,31 @@
+- name: Generate bcrypt hash for Argo CD admin password (on controller)
+  delegate_to: localhost
+  become: false
+  vars:
+    pw: "{{ argocd_admin_password_plain }}"
+  shell: |
+    set -euo pipefail
+    htpasswd -nbBC 10 "" "{{ pw }}" | tr -d ':\n'
+  args:
+    executable: /bin/bash
+  register: argocd_bcrypt
+  changed_when: false
+
+- name: Set Argo CD admin password (argocd-secret) via kubectl
+  become: true
+  shell: |
+    set -euo pipefail
+    kubectl -n argocd patch secret argocd-secret \
+      --type merge \
+      -p '{"stringData":{"admin.password":"{{ argocd_bcrypt.stdout }}","admin.passwordMtime":"{{ lookup("pipe","date +%s") }}"}}'
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+
+- name: Restart argocd-server to pick up password change
+  become: true
+  shell: kubectl -n argocd rollout restart deploy/argocd-server
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml

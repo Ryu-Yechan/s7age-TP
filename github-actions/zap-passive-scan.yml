@@ -1,0 +1,68 @@
+name: ZAP Passive Scan (Selectable)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Select target to run ZAP baseline"
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - frontend
+          - backend
+
+jobs:
+  zap_passive_frontend:
+    name: ZAP Baseline (Frontend)
+    if: ${{ inputs.target == 'all' || inputs.target == 'frontend' }}
+    runs-on: [self-hosted, linux]
+    continue-on-error: true
+    steps:
+      - name: ZAP Baseline (Frontend)
+        run: |
+          mkdir -p zap-out/passive/frontend
+          docker run --rm \
+            -v "${PWD}/zap-out/passive/frontend:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t https://devs7age.com \
+              -n /zap/wrk/zap-context.xml \
+              -r zap-frontend-passive.html \
+              -J zap-frontend-passive.json
+
+      - name: Upload Frontend Passive Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-frontend-passive-reports
+          path: |
+            zap-out/passive/frontend/zap-frontend-passive.html
+            zap-out/passive/frontend/zap-frontend-passive.json
+
+  zap_passive_backend:
+    name: ZAP Baseline (Backend)
+    if: ${{ inputs.target == 'all' || inputs.target == 'backend' }}
+    runs-on: [self-hosted, linux]
+    continue-on-error: true
+    steps:
+      - name: ZAP Baseline (Backend)
+        run: |
+          mkdir -p zap-out/passive/backend
+          docker run --rm \
+            -v "${PWD}/zap-out/passive/backend:/zap/wrk" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t https://devapi.s7age.com \
+              -r zap-backend-passive.html \
+              -J zap-backend-passive.json
+
+      - name: Upload Backend Passive Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-backend-passive-reports
+          path: |
+            zap-out/passive/backend/zap-backend-passive.html
+            zap-out/passive/backend/zap-backend-passive.json

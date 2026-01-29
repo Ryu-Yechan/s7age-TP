@@ -1,0 +1,3 @@
+mysql_node_label_key: node-role
+mysql_node_label_value: db
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml

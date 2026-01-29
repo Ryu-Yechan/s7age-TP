@@ -1,0 +1,100 @@
+# roles/mysql/tasks/main.yml
+
+- name: Add AWS EBS CSI Driver Helm repo
+  shell: helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver || true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Update Helm repos
+  shell: helm repo update
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Install AWS EBS CSI Driver
+  shell: |
+    helm upgrade --install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
+      --namespace kube-system
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Create MySQL namespace
+  shell: kubectl create namespace {{ mysql_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Render StorageClass manifest
+  template:
+    src: storageclass.yaml.j2
+    dest: /tmp/mysql-storageclass.yaml
+    mode: "0644"
+
+- name: Apply StorageClass
+  shell: kubectl apply -f /tmp/mysql-storageclass.yaml
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Render MySQL Secret manifest
+  template:
+    src: secret.yaml.j2
+    dest: /tmp/mysql-secret.yaml
+    mode: "0644"
+
+- name: Apply MySQL Secret
+  shell: kubectl apply -f /tmp/mysql-secret.yaml -n {{ mysql_namespace }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Render MySQL Service manifest
+  template:
+    src: service.yaml.j2
+    dest: /tmp/mysql-service.yaml
+    mode: "0644"
+
+- name: Apply MySQL Service
+  shell: kubectl apply -f /tmp/mysql-service.yaml -n {{ mysql_namespace }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Render MySQL StatefulSet manifest
+  template:
+    src: statefulset.yaml.j2
+    dest: /tmp/mysql-statefulset.yaml
+    mode: "0644"
+
+- name: Apply MySQL StatefulSet
+  shell: kubectl apply -f /tmp/mysql-statefulset.yaml -n {{ mysql_namespace }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Wait for MySQL pod to be ready
+  shell: kubectl -n {{ mysql_namespace }} wait --for=condition=Ready pod/mysql-0 --timeout=300s
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Wait for MySQL to be fully initialized
+  shell: |
+    kubectl exec -n {{ mysql_namespace }} mysql-0 -- \
+      sh -c 'mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent'
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: mysql_ping
+  until: mysql_ping.rc == 0
+  retries: 30
+  delay: 10
+
+- name: Create stage database
+  shell: |
+    kubectl exec -n {{ mysql_namespace }} mysql-0 -- \
+      sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS {{ mysql_database }};"'
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: create_db
+  until: create_db.rc == 0
+  retries: 5
+  delay: 10
+
+
+- name: Show MySQL pod status
+  shell: kubectl -n {{ mysql_namespace }} get pods -o wide
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"

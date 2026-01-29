@@ -1,0 +1,72 @@
+- name: Configure logrotate for syslog
+  become: true
+  copy:
+    dest: /etc/logrotate.d/rsyslog
+    content: |
+      /var/log/syslog
+      /var/log/kern.log
+      /var/log/auth.log
+      {
+          daily
+          rotate 7
+          compress
+          delaycompress
+          missingok
+          notifempty
+          size 100M
+      }
+    mode: "0644"
+
+- name: Configure logrotate for k3s
+  become: true
+  copy:
+    dest: /etc/logrotate.d/k3s
+    content: |
+      /var/log/k3s*.log
+      {
+          daily
+          rotate 7
+          compress
+          delaycompress
+          missingok
+          notifempty
+          size 100M
+          copytruncate
+      }
+    mode: "0644"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

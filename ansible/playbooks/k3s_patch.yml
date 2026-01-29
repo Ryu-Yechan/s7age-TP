@@ -1,0 +1,14 @@
+- name: Setup k3s master
+  hosts: master
+  become: true
+  gather_facts: true
+  roles:
+    - k3s_master/patch
+ 
+    
+- name: Join k3s workers
+  hosts: worker
+  become: true
+  gather_facts: true
+  roles:
+    - k3s_worker/patch

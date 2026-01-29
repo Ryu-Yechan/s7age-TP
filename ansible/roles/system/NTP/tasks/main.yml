@@ -1,0 +1,17 @@
+- name: Install chrony (NTP)
+  become: true
+  apt:
+    name: chrony
+    state: present
+
+- name: Enable and start chrony
+  become: true
+  systemd:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Set timezone to UTC
+  become: true
+  timezone:
+    name: UTC

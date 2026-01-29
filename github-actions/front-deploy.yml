@@ -1,0 +1,77 @@
+name: Deploy React to S3 + CloudFront
+
+on:
+  push:
+    branches:
+      - dev
+      - main  
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    # 브랜치에 따라 environment 자동 선택
+    environment: ${{ github.ref_name == 'main' && 'PROD' || 'DEV' }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Semgrep scan
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/ci
+            p/javascript
+            p/react
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: CI=false npm run build
+
+      - name: Add robots.txt and sitemap.xml
+        run: |
+          cat > ./build/robots.txt <<EOF
+          User-agent: *
+          Allow: /
+          Sitemap: ${{ vars.SITE_URL }}/sitemap.xml
+          EOF
+          cat > ./build/sitemap.xml <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url>
+              <loc>${{ vars.SITE_URL }}/</loc>
+            </url>
+          </urlset>
+          EOF
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: AWS identity check
+        run: aws sts get-caller-identity
+
+      - name: Sync build files to S3
+        run: |
+          aws s3 sync ./build s3://${{ secrets.S3_BUCKET }} --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"

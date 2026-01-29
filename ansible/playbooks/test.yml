@@ -1,0 +1,33 @@
+- name: Set hostname on all k3s nodes
+  hosts: master:worker
+  become: true
+  gather_facts: false
+  roles:
+    - env
+
+- name: Setup k3s master
+  hosts: master
+  become: true
+  gather_facts: true
+  roles:
+    - k3s_master
+    - helm_bootstrap
+
+- name: set nodename labels
+  hosts: monitoring
+  become: true
+  gather_facts: false
+  roles:
+    - label/monitoring
+
+- name: Install cluster addons
+  hosts: master
+  become: true
+  gather_facts: false
+  roles:
+    - namespace
+    - secrets
+    - ingress_nginx
+    - argocd/install
+    - argocd/ui
+    - argocd/apps

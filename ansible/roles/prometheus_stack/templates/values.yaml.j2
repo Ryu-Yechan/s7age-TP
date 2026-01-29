@@ -1,0 +1,120 @@
+crds:
+  enabled: true
+
+prometheus:
+  prometheusSpec:
+    externalUrl: {{ prometheus_externalUrl }}
+    retention: 3d
+    scrapeInterval: 30s
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: role
+                  operator: In
+                  values: ["monitoring"]
+
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    externalUrl: {{ alert_externalUrl }}
+    secrets:
+      - alertmanager-discord-webhook
+
+  config:
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: "discord"
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: "null"
+
+    receivers:
+      - name: "discord"
+        slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/alertmanager-discord-webhook/discord_slack_webhook
+            send_resolved: true
+
+      - name: "null"
+
+    templates:
+      - /etc/alertmanager/config/*.tmpl
+
+
+grafana:
+  enabled: true
+  admin:
+    existingSecret: grafana-admin
+    passwordKey: admin-password
+  grafana.ini:
+    server:
+      root_url: {{ grafana_root_url }}
+      serve_from_sub_path: true
+
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: role
+                operator: In
+                values: ["monitoring"]
+
+  sidecar:
+    datasources:
+      enabled: false
+      defaultDatasourceEnabled: false
+    dashboards:
+      enabled: true
+
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090
+          access: proxy
+          isDefault: true
+          editable: false
+          jsonData:
+            timeInterval: "30s"
+
+        - name: Loki
+          type: loki
+          url: http://loki.monitoring.svc:3100
+          access: proxy
+          isDefault: false
+          editable: false
+          jsonData:
+            maxLines: 1000
+
+        - name: Alertmanager
+          type: alertmanager
+          url: http://monitoring-kube-prometheus-alertmanager.monitoring.svc:9093
+          access: proxy
+          editable: false
+          jsonData:
+            implementation: prometheus

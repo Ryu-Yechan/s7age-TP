@@ -1,0 +1,59 @@
+- name: Add Prometheus Helm repo
+  shell: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  failed_when: false
+  changed_when: false
+
+- name: Update Helm repos
+  shell: helm repo update
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Create monitoring namespace
+  shell: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# [락 방지] 현재 프로메테우스 상태가 꼬였는지 체크
+- name: Check if Prometheus release is in pending state
+  shell: |
+    helm list -n monitoring -f "^monitoring$" | grep -E "pending-install|pending-upgrade|failed"
+  register: prometheus_status
+  failed_when: false
+  changed_when: false
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# [락 해제] 상태가 꼬였다면 재설치를 위해 기존 락 강제 제거
+- name: Force cleanup Prometheus if it is stuck
+  shell: |
+    helm uninstall monitoring -n monitoring --wait || kubectl delete secret -n monitoring -l name=monitoring,owner=helm
+  when: prometheus_status.rc == 0
+  failed_when: false
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Render kube-prometheus-stack values (template)
+  template:
+    src: values.yaml.j2
+    dest: /tmp/kube-prometheus-stack-values.yaml
+    mode: "0644"
+
+- name: Install/Upgrade kube-prometheus-stack
+  shell: |
+    helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+      -n monitoring \
+      -f /tmp/kube-prometheus-stack-values.yaml \
+      --wait --timeout 20m --atomic
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  async: 1800
+  poll: 15
+
+- name: Wait for monitoring pods
+  shell: kubectl -n monitoring wait --for=condition=Ready pods --all --timeout=300s
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml

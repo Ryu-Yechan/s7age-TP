@@ -1,0 +1,59 @@
+# ========================================
+# OS / Editor
+# ========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========================================
+# Terraform
+# ========================================
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfstate.d/
+terraform/crash.log
+terraform/.terraform.lock.hcl
+terraform/backup/
+terraform/*.backup
+terraform/*.backup.*
+terraform/state.backup*
+terraform/*.json
+
+# Terraform Bootstrap
+terraform/bootstrap/.terraform/
+terraform/bootstrap/*.tfstate*
+terraform/bootstrap/terraform.tfstate.d/
+terraform/bootstrap/.terraform.lock.hcl
+
+# ========================================
+# Ansible
+# ========================================
+ansible/.venv/
+**/__pycache__/
+*.pyc
+ansible/*.retry
+ansible/*.log
+ansible/.fact_cache/
+ansible/.cache/
+
+# Ansible Secrets
+ansible/*.vault_pass*
+ansible/.vault_pass*
+ansible/vault_pass*
+ansible/*.key
+ansible/*.pem
+ansible/secrets*.yml
+ansible/vars_private*.yml
+ansible/.env
+ansible/inventory.local.yml
+
+# ========================================
+# General
+# ========================================
+*.log
+.env
+.env.local

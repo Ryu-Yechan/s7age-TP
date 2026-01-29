@@ -1,0 +1,10 @@
+- name: Install helm v3
+  become: true
+  shell: |
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm
+
+- name: Check helm
+  command: helm version
+  changed_when: false

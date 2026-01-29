@@ -1,0 +1,19 @@
+- name: Set hostname on all k3s nodes
+  hosts: master:worker
+  become: true
+  gather_facts: false
+  roles:
+    - env
+
+- name: Setup k3s master
+  hosts: master
+  gather_facts: true
+  roles:
+    - k3s_master/install
+    - helm_bootstrap
+    
+- name: Join k3s workers
+  hosts: dev_worker
+  gather_facts: true
+  roles:
+    - k3s_worker/install

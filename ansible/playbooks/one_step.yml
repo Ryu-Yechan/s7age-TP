@@ -1,0 +1,6 @@
+- name: Set One Step
+  hosts: master
+  become: true
+  gather_facts: true
+  roles:
+    - secrets

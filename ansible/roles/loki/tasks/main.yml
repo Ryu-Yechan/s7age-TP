@@ -1,0 +1,153 @@
+# roles/loki/tasks/main.yml (final)
+
+- name: Loki | Select master host
+  set_fact:
+    loki_master: "{{ groups['master'][0] }}"
+  run_once: true
+
+- name: Loki | Copy values file to master
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  become: true
+  copy:
+    src: values.yml
+    dest: /tmp/loki-values.yaml
+    mode: "0644"
+
+- name: Loki | Assert values file exists on master
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  become: true
+  stat:
+    path: /tmp/loki-values.yaml
+  register: loki_values_stat
+
+- name: Loki | Fail fast if values file is missing
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  fail:
+    msg: "/tmp/loki-values.yaml not found on master."
+  when: not loki_values_stat.stat.exists
+
+- name: Loki | Install / Upgrade (try 1)
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  become: true
+  shell: |
+    set -euo pipefail
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    export HELM_CONFIG_HOME=/root/.config/helm
+    export HELM_CACHE_HOME=/root/.cache/helm
+    export HELM_DATA_HOME=/root/.local/share/helm
+
+    helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+    helm repo update >/dev/null 2>&1 || true
+
+    helm upgrade --install loki grafana/loki \
+      -n monitoring \
+      -f /tmp/loki-values.yaml \
+      --wait --timeout 10m
+  args:
+    executable: /bin/bash
+  register: loki_install_1
+  failed_when: false
+  changed_when: false
+
+- name: Loki | Detect helm lock
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  set_fact:
+    loki_lock_detected: >-
+      {{
+        (
+          (loki_install_1.stdout | default('')) ~
+          (loki_install_1.stderr | default(''))
+        ) is search('another operation \\(install/upgrade/rollback\\) is in progress')
+      }}
+
+- name: Loki | Wait if helm lock detected
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  pause:
+    seconds: 60
+  when: loki_install_1.rc != 0 and (loki_lock_detected | default(false))
+
+- name: Loki | Install / Upgrade (try 2 after wait)
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  become: true
+  shell: |
+    set -euo pipefail
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    export HELM_CONFIG_HOME=/root/.config/helm
+    export HELM_CACHE_HOME=/root/.cache/helm
+    export HELM_DATA_HOME=/root/.local/share/helm
+
+    helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+    helm repo update >/dev/null 2>&1 || true
+
+    helm upgrade --install loki grafana/loki \
+      -n monitoring \
+      -f /tmp/loki-values.yaml \
+      --wait --timeout 10m
+  args:
+    executable: /bin/bash
+  when: loki_install_1.rc != 0 and (loki_lock_detected | default(false))
+  register: loki_install_2
+  failed_when: false
+  changed_when: false
+
+- name: Loki | Diagnostics on failure (pods/pvc/events/history/status)
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  become: true
+  shell: |
+    set -euo pipefail
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+    echo "### helm status"
+    helm -n monitoring status loki || true
+
+    echo "### helm history"
+    helm -n monitoring history loki || true
+
+    echo "### loki pods"
+    kubectl -n monitoring get pods -o wide | grep -i loki || true
+
+    echo "### loki pvc"
+    kubectl -n monitoring get pvc | grep -i loki || true
+
+    echo "### recent events"
+    kubectl -n monitoring get events --sort-by=.lastTimestamp | tail -n 50 || true
+
+    echo "### loki-0 logs (tail)"
+    kubectl -n monitoring logs loki-0 -c loki --tail=200 || true
+  args:
+    executable: /bin/bash
+  when: >
+    (loki_install_1.rc != 0 and not (loki_lock_detected | default(false)))
+    or
+    ((loki_lock_detected | default(false)) and (loki_install_2.rc | default(1)) != 0)
+  failed_when: false
+  changed_when: false
+
+- name: Loki | Fail if install did not succeed
+  run_once: true
+  delegate_to: "{{ loki_master }}"
+  fail:
+    msg: |
+      Loki install/upgrade failed.
+
+      Try1 rc={{ loki_install_1.rc }}
+      Try1 stdout={{ loki_install_1.stdout | default('') }}
+      Try1 stderr={{ loki_install_1.stderr | default('') }}
+
+      Lock detected={{ loki_lock_detected | default(false) }}
+
+      Try2 rc={{ loki_install_2.rc | default('n/a') }}
+      Try2 stdout={{ loki_install_2.stdout | default('') }}
+      Try2 stderr={{ loki_install_2.stderr | default('') }}
+  when: >
+    (loki_install_1.rc != 0 and not (loki_lock_detected | default(false)))
+    or
+    ((loki_lock_detected | default(false)) and (loki_install_2.rc | default(1)) != 0)

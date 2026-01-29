@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd
+  namespace: {{ argocd_namespace }}
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "{{ 'true' if argocd_tls_enabled else 'false' }}"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ argocd_host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ argocd_release_name }}-server
+                port:
+                  number: 80
+{% if argocd_tls_enabled %}
+  tls:
+    - hosts:
+        - {{ argocd_host }}
+      secretName: {{ argocd_tls_secret_name }}
+{% endif %}

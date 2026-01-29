@@ -1,0 +1,37 @@
+- name: Delete legacy argocd ingress in default namespace if exists
+  shell: kubectl -n default delete ingress argocd --ignore-not-found
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Add Argo Helm repo
+  shell: helm repo add argo https://argoproj.github.io/argo-helm || true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Update Helm repos
+  shell: helm repo update
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Create argocd namespace
+  shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Install Argo CD (server service ClusterIP)
+  shell: |
+    helm upgrade --install argocd argo/argo-cd \
+      -n argocd \
+      --set server.service.type=ClusterIP
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Wait for Argo CD server deployment ready
+  shell: kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+- name: Show Argo CD pod status
+  shell: kubectl -n argocd get pods
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"

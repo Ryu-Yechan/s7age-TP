@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reserve-service
+  labels:
+    app: reserve-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reserve-service
+  template:
+    metadata:
+      labels:
+        app: reserve-service
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: worker1
+      containers:
+      - name: reserve-service
+        image: ghcr.io/s7age/reserve-service:latest
+        imagePullPolicy: Always  
+        ports:
+        - containerPort: 8080
+          name: http
+          
+        # [ADD] 컨테이너 보안 설정 (Semgrep: runAsNonRoot / writable fs 대응)
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000               # [ADD] non-root 확정
+          runAsGroup: 1000              # [ADD] non-root 확정
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
+
+        # [ADD] readOnlyRootFilesystem 사용 시 /tmp 쓰기 허용
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+            
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:mysql://mysql.mysql.svc.cluster.local:3306/stage?serverTimezone=Asia/Seoul
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: spring-datasource
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: spring-datasource
+              key: password
+        - name: REDIS_CLUSTER_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: redis-config
+              key: endpoint
+              #optional: true  # ConfigMap 없어도 Pod 뜸
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "800m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+      # [ADD] /tmp 마운트에 사용할 임시 볼륨
+      volumes:
+        - name: tmp
+          emptyDir: {}
+          
+      imagePullSecrets:
+      - name: ghcr-auth
+

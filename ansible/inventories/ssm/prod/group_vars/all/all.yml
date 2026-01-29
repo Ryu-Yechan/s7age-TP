@@ -1,0 +1,23 @@
+ansible_connection: amazon.aws.aws_ssm
+ansible_aws_ssm_region: ap-northeast-2
+ansible_aws_ssm_bucket_name: stage-ansible-ssm-tmp
+ansible_user: ssm-user
+ansible_python_interpreter: /usr/bin/python3
+grafana_root_url: "https://grafana.s7age.com/"
+alert_externalUrl: "https://alert.s7age.com"
+prometheus_externalUrl: "https://prometheus.s7age.com"
+kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+argocd_namespace: argocd
+argocd_release_name: argocd
+argocd_host: argocd.s7age.com
+argocd_tls_enabled: false
+argocd_tls_secret_name: argocd-tls
+
+mysql_storage_reclaim_policy: Delete 
+gitops_path: "k8s"
+gitops_branch: "main"
+terraform_dir: "{{ playbook_dir }}/../../terraform"
+
+k3s_version: "v1.33.6+k3s1"
+k3s_channel: "stable"
+k3s_install_url: "https://get.k3s.io"

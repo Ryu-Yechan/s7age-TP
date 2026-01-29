@@ -1,0 +1,10 @@
+- name: Monitoring
+  hosts: master
+  become: true
+  gather_facts: false
+  roles:
+    - argocd
+    - argocd_ui
+    - prometheus_stack
+    - loki
+    - otelcol

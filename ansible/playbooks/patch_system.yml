@@ -1,0 +1,8 @@
+- name: Set One Step
+  hosts: master
+  become: true
+  gather_facts: false
+  roles:
+    - system/logrotate
+    - system/NTP
+    - system/packages
